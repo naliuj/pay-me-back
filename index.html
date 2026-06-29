@@ -216,6 +216,120 @@
     flex-direction: column;
     gap: 4px;
   }
+  .mode-toggle {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .mode-toggle button {
+    flex: 1;
+    background: var(--panel);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .mode-toggle button.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .section-label {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 14px 0 8px;
+  }
+  .individual-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .individual-row .name-label {
+    flex: 1;
+    font-size: 13px;
+  }
+  .individual-row input[type=number] {
+    width: 110px;
+  }
+  .item-row {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 8px;
+  }
+  .item-row-top {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .item-row-top input[type=text] {
+    flex: 2;
+  }
+  .item-row-top input[type=number] {
+    flex: 1;
+    width: 0;
+  }
+  .item-people {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .item-person-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .item-person-toggle.active {
+    border-color: var(--accent-2);
+    background: rgba(63,207,142,0.15);
+  }
+  .item-person-toggle input { display: none; }
+  .add-item-btn {
+    width: 100%;
+    background: var(--panel);
+    border: 1px dashed var(--border);
+    color: var(--text);
+    padding: 8px;
+    font-size: 13px;
+  }
+  .tax-tip-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .tax-tip-row > div {
+    flex: 1;
+  }
+  .tax-tip-row label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .tax-tip-row input {
+    width: 100%;
+  }
+  .itemized-summary {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+  .itemized-summary div {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 0;
+  }
 </style>
 </head>
 <body>
@@ -324,10 +438,17 @@
   function addTransaction() {
     transactions.push({
       id: nextTxId++,
+      mode: 'equal', // 'equal' | 'itemized'
       label: '',
       amount: '',
       payer: '',
-      participants: new Set(people) // default: split among everyone currently added
+      participants: new Set(people), // default: split among everyone currently added
+
+      // itemized-mode fields
+      individual: {},  // name -> string amount (a person's own, unshared purchases)
+      items: [],       // [{ id, name, price, people: Set<name> }]  shared items
+      tax: '',
+      tip: ''
     });
     renderTransactions();
   }
@@ -335,6 +456,72 @@
   function removeTransaction(id) {
     transactions = transactions.filter(t => t.id !== id);
     renderTransactions();
+  }
+
+  let nextItemId = 1;
+  function addItem(tx) {
+    tx.items.push({ id: nextItemId++, name: '', price: '', people: new Set() });
+    renderTransactions();
+  }
+
+  function removeItem(tx, itemId) {
+    tx.items = tx.items.filter(i => i.id !== itemId);
+    renderTransactions();
+  }
+
+  // Compute each person's total share of an itemized transaction, and the bill total.
+  // Returns { perPerson: {name: number}, billTotal: number, error: string|null }
+  function computeItemizedTotals(tx) {
+    const perPerson = {};
+    people.forEach(p => perPerson[p] = 0);
+
+    // Individual (unshared) purchases
+    for (const name of people) {
+      const raw = tx.individual[name];
+      if (raw !== undefined && raw !== '') {
+        const val = parseFloat(raw);
+        if (isNaN(val) || val < 0) {
+          return { error: `Invalid individual amount for ${name} in "${tx.label || '(untitled)'}".` };
+        }
+        perPerson[name] += val;
+      }
+    }
+
+    // Shared items
+    for (const item of tx.items) {
+      const price = parseFloat(item.price);
+      if (item.name.trim() === '' && item.people.size === 0 && (item.price === '' || price === 0)) {
+        continue; // skip fully-empty rows
+      }
+      if (isNaN(price) || price <= 0) {
+        return { error: `Item "${item.name || '(unnamed)'}" in "${tx.label || '(untitled)'}" needs a valid price.` };
+      }
+      if (item.people.size === 0) {
+        return { error: `Item "${item.name || '(unnamed)'}" in "${tx.label || '(untitled)'}" needs at least one person.` };
+      }
+      const share = price / item.people.size;
+      item.people.forEach(name => { perPerson[name] += share; });
+    }
+
+    const subtotal = Object.values(perPerson).reduce((a, b) => a + b, 0);
+
+    const tax = tx.tax === '' ? 0 : parseFloat(tx.tax);
+    const tip = tx.tip === '' ? 0 : parseFloat(tx.tip);
+    if (isNaN(tax) || tax < 0) return { error: `Invalid tax amount in "${tx.label || '(untitled)'}".` };
+    if (isNaN(tip) || tip < 0) return { error: `Invalid tip amount in "${tx.label || '(untitled)'}".` };
+
+    if (subtotal <= 0) {
+      return { error: `"${tx.label || '(untitled)'}" has no purchases or items entered yet.` };
+    }
+
+    // Distribute tax/tip proportionally to each person's subtotal share
+    for (const name of people) {
+      const proportion = perPerson[name] / subtotal;
+      perPerson[name] += proportion * (tax + tip);
+    }
+
+    const billTotal = subtotal + tax + tip;
+    return { perPerson, billTotal, error: null };
   }
 
   function renderTransactions() {
@@ -350,6 +537,21 @@
       const txEl = document.createElement('div');
       txEl.className = 'tx';
 
+      // Mode toggle
+      const modeToggle = document.createElement('div');
+      modeToggle.className = 'mode-toggle';
+      const equalBtn = document.createElement('button');
+      equalBtn.textContent = 'Equal Split';
+      equalBtn.className = tx.mode === 'equal' ? 'active' : '';
+      equalBtn.addEventListener('click', () => { tx.mode = 'equal'; renderTransactions(); });
+      const itemizedBtn = document.createElement('button');
+      itemizedBtn.textContent = 'Itemized Bill';
+      itemizedBtn.className = tx.mode === 'itemized' ? 'active' : '';
+      itemizedBtn.addEventListener('click', () => { tx.mode = 'itemized'; renderTransactions(); });
+      modeToggle.appendChild(equalBtn);
+      modeToggle.appendChild(itemizedBtn);
+      txEl.appendChild(modeToggle);
+
       const header = document.createElement('div');
       header.className = 'tx-header';
 
@@ -358,22 +560,23 @@
       labelInput.placeholder = 'Description (e.g. Dinner)';
       labelInput.value = tx.label;
       labelInput.addEventListener('input', e => { tx.label = e.target.value; });
+      header.appendChild(labelInput);
 
-      const amountInput = document.createElement('input');
-      amountInput.type = 'number';
-      amountInput.placeholder = 'Amount';
-      amountInput.step = '0.01';
-      amountInput.min = '0';
-      amountInput.value = tx.amount;
-      amountInput.addEventListener('input', e => { tx.amount = e.target.value; });
+      if (tx.mode === 'equal') {
+        const amountInput = document.createElement('input');
+        amountInput.type = 'number';
+        amountInput.placeholder = 'Amount';
+        amountInput.step = '0.01';
+        amountInput.min = '0';
+        amountInput.value = tx.amount;
+        amountInput.addEventListener('input', e => { tx.amount = e.target.value; });
+        header.appendChild(amountInput);
+      }
 
       const removeTxBtn = document.createElement('button');
       removeTxBtn.className = 'danger';
       removeTxBtn.textContent = 'Remove';
       removeTxBtn.addEventListener('click', () => removeTransaction(tx.id));
-
-      header.appendChild(labelInput);
-      header.appendChild(amountInput);
       header.appendChild(removeTxBtn);
 
       const payerRow = document.createElement('div');
@@ -401,15 +604,21 @@
       payerSelect.addEventListener('change', e => { tx.payer = e.target.value; });
       payerRow.appendChild(payerSelect);
 
-      const peopleRow = document.createElement('div');
-      peopleRow.className = 'tx-people';
+      txEl.appendChild(header);
+      txEl.appendChild(payerRow);
 
       if (people.length === 0) {
         const hint = document.createElement('div');
         hint.className = 'empty-hint';
-        hint.textContent = 'Add people first to assign this transaction.';
-        peopleRow.appendChild(hint);
-      } else {
+        hint.textContent = 'Add people first to set up this transaction.';
+        txEl.appendChild(hint);
+        txListEl.appendChild(txEl);
+        return;
+      }
+
+      if (tx.mode === 'equal') {
+        const peopleRow = document.createElement('div');
+        peopleRow.className = 'tx-people';
         people.forEach(name => {
           const toggle = document.createElement('label');
           toggle.className = 'tx-person-toggle' + (tx.participants.has(name) ? ' active' : '');
@@ -427,11 +636,159 @@
           toggle.appendChild(span);
           peopleRow.appendChild(toggle);
         });
+        txEl.appendChild(peopleRow);
+      } else {
+        // ---- Itemized mode ----
+
+        // Individual (unshared) purchases
+        const indivLabel = document.createElement('div');
+        indivLabel.className = 'section-label';
+        indivLabel.textContent = "Individual purchases (each person's own items)";
+        txEl.appendChild(indivLabel);
+
+        people.forEach(name => {
+          const row = document.createElement('div');
+          row.className = 'individual-row';
+          const nameLabel = document.createElement('span');
+          nameLabel.className = 'name-label';
+          nameLabel.textContent = name;
+          const amtInput = document.createElement('input');
+          amtInput.type = 'number';
+          amtInput.placeholder = '$0.00';
+          amtInput.step = '0.01';
+          amtInput.min = '0';
+          amtInput.value = tx.individual[name] || '';
+          amtInput.addEventListener('input', e => { tx.individual[name] = e.target.value; });
+          row.appendChild(nameLabel);
+          row.appendChild(amtInput);
+          txEl.appendChild(row);
+        });
+
+        // Shared items
+        const itemsLabel = document.createElement('div');
+        itemsLabel.className = 'section-label';
+        itemsLabel.textContent = 'Shared items (split evenly among selected people)';
+        txEl.appendChild(itemsLabel);
+
+        tx.items.forEach(item => {
+          const itemEl = document.createElement('div');
+          itemEl.className = 'item-row';
+
+          const top = document.createElement('div');
+          top.className = 'item-row-top';
+
+          const nameInput = document.createElement('input');
+          nameInput.type = 'text';
+          nameInput.placeholder = 'Item (e.g. Fries)';
+          nameInput.value = item.name;
+          nameInput.addEventListener('input', e => { item.name = e.target.value; });
+
+          const priceInput = document.createElement('input');
+          priceInput.type = 'number';
+          priceInput.placeholder = 'Price';
+          priceInput.step = '0.01';
+          priceInput.min = '0';
+          priceInput.value = item.price;
+          priceInput.addEventListener('input', e => { item.price = e.target.value; });
+
+          const removeItemBtn = document.createElement('button');
+          removeItemBtn.className = 'danger';
+          removeItemBtn.textContent = '×';
+          removeItemBtn.addEventListener('click', () => removeItem(tx, item.id));
+
+          top.appendChild(nameInput);
+          top.appendChild(priceInput);
+          top.appendChild(removeItemBtn);
+          itemEl.appendChild(top);
+
+          const itemPeopleRow = document.createElement('div');
+          itemPeopleRow.className = 'item-people';
+          people.forEach(name => {
+            const toggle = document.createElement('label');
+            toggle.className = 'item-person-toggle' + (item.people.has(name) ? ' active' : '');
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = item.people.has(name);
+            cb.addEventListener('change', () => {
+              if (cb.checked) item.people.add(name);
+              else item.people.delete(name);
+              toggle.classList.toggle('active', cb.checked);
+            });
+            const span = document.createElement('span');
+            span.textContent = name;
+            toggle.appendChild(cb);
+            toggle.appendChild(span);
+            itemPeopleRow.appendChild(toggle);
+          });
+          itemEl.appendChild(itemPeopleRow);
+
+          txEl.appendChild(itemEl);
+        });
+
+        const addItemBtn = document.createElement('button');
+        addItemBtn.className = 'add-item-btn';
+        addItemBtn.textContent = '+ Add shared item';
+        addItemBtn.addEventListener('click', () => addItem(tx));
+        txEl.appendChild(addItemBtn);
+
+        // Tax & tip
+        const taxTipRow = document.createElement('div');
+        taxTipRow.className = 'tax-tip-row';
+
+        const taxWrap = document.createElement('div');
+        const taxLabel = document.createElement('label');
+        taxLabel.textContent = 'Tax ($)';
+        const taxInput = document.createElement('input');
+        taxInput.type = 'number';
+        taxInput.step = '0.01';
+        taxInput.min = '0';
+        taxInput.placeholder = '0.00';
+        taxInput.value = tx.tax;
+        taxInput.addEventListener('input', e => { tx.tax = e.target.value; });
+        taxWrap.appendChild(taxLabel);
+        taxWrap.appendChild(taxInput);
+
+        const tipWrap = document.createElement('div');
+        const tipLabel = document.createElement('label');
+        tipLabel.textContent = 'Tip ($)';
+        const tipInput = document.createElement('input');
+        tipInput.type = 'number';
+        tipInput.step = '0.01';
+        tipInput.min = '0';
+        tipInput.placeholder = '0.00';
+        tipInput.value = tx.tip;
+        tipInput.addEventListener('input', e => { tx.tip = e.target.value; });
+        tipWrap.appendChild(tipLabel);
+        tipWrap.appendChild(tipInput);
+
+        taxTipRow.appendChild(taxWrap);
+        taxTipRow.appendChild(tipWrap);
+        txEl.appendChild(taxTipRow);
+
+        // Live per-person breakdown
+        const result = computeItemizedTotals(tx);
+        const summary = document.createElement('div');
+        summary.className = 'itemized-summary';
+        if (result.error) {
+          summary.innerHTML = `<div style="color: var(--danger);">${result.error}</div>`;
+        } else {
+          people.forEach(name => {
+            const amt = result.perPerson[name];
+            if (amt > 0.005) {
+              const row = document.createElement('div');
+              row.innerHTML = `<span>${name}</span><span>$${amt.toFixed(2)}</span>`;
+              summary.appendChild(row);
+            }
+          });
+          const totalRow = document.createElement('div');
+          totalRow.style.fontWeight = '600';
+          totalRow.style.color = 'var(--text)';
+          totalRow.innerHTML = `<span>Bill total</span><span>$${result.billTotal.toFixed(2)}</span>`;
+          summary.appendChild(totalRow);
+        }
+        txEl.appendChild(summary);
       }
 
-      txEl.appendChild(header);
-      txEl.appendChild(payerRow);
-      txEl.appendChild(peopleRow);
       txListEl.appendChild(txEl);
     });
   }
@@ -455,23 +812,34 @@
     people.forEach(p => balances[p] = 0);
 
     for (const tx of transactions) {
-      const amount = parseFloat(tx.amount);
       if (!tx.payer) {
         errorMsg.textContent = `Transaction "${tx.label || '(untitled)'}" needs a payer.`;
         return;
       }
-      if (isNaN(amount) || amount <= 0) {
-        errorMsg.textContent = `Transaction "${tx.label || '(untitled)'}" needs a valid amount.`;
-        return;
+
+      if (tx.mode === 'itemized') {
+        const result = computeItemizedTotals(tx);
+        if (result.error) {
+          errorMsg.textContent = result.error;
+          return;
+        }
+        balances[tx.payer] += result.billTotal;
+        people.forEach(name => { balances[name] -= result.perPerson[name]; });
+      } else {
+        const amount = parseFloat(tx.amount);
+        if (isNaN(amount) || amount <= 0) {
+          errorMsg.textContent = `Transaction "${tx.label || '(untitled)'}" needs a valid amount.`;
+          return;
+        }
+        const participants = Array.from(tx.participants);
+        if (participants.length === 0) {
+          errorMsg.textContent = `Transaction "${tx.label || '(untitled)'}" needs at least one participant.`;
+          return;
+        }
+        const share = amount / participants.length;
+        balances[tx.payer] += amount;
+        participants.forEach(p => { balances[p] -= share; });
       }
-      const participants = Array.from(tx.participants);
-      if (participants.length === 0) {
-        errorMsg.textContent = `Transaction "${tx.label || '(untitled)'}" needs at least one participant.`;
-        return;
-      }
-      const share = amount / participants.length;
-      balances[tx.payer] += amount;
-      participants.forEach(p => { balances[p] -= share; });
     }
 
     // Settle balances: people with negative balance owe people with positive balance
