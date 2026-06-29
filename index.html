@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PayMeBack — Split Expenses</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #181b22;
+    --panel-2: #1f232c;
+    --border: #2a2f3a;
+    --text: #e8eaed;
+    --muted: #8b919e;
+    --accent: #5b8def;
+    --accent-2: #3fcf8e;
+    --danger: #e25c5c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 32px 16px 80px;
+  }
+  .container {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 24px;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    color: var(--muted);
+    margin-bottom: 28px;
+    font-size: 14px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .panel h2 {
+    font-size: 16px;
+    margin: 0 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  input[type=text], input[type=number] {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 14px;
+    outline: none;
+  }
+  input[type=text]:focus, input[type=number]:focus {
+    border-color: var(--accent);
+  }
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    background: var(--accent);
+    color: white;
+  }
+  button:hover { filter: brightness(1.1); }
+  button.secondary {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  button.danger {
+    background: transparent;
+    color: var(--danger);
+    padding: 4px 8px;
+    font-weight: 400;
+  }
+  .people-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .chip {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 8px 6px 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+  }
+  .chip button.danger {
+    padding: 0 4px;
+    font-size: 16px;
+    line-height: 1;
+  }
+  .add-person-row input {
+    flex: 1;
+  }
+  .empty-hint {
+    color: var(--muted);
+    font-size: 13px;
+    font-style: italic;
+  }
+  .tx {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .tx-header {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .tx-header input[type=text] {
+    flex: 2;
+  }
+  .tx-header input[type=number] {
+    flex: 1;
+    width: 0;
+  }
+  .tx-header button.danger {
+    flex: 0 0 auto;
+  }
+  .tx-people {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .tx-person-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .tx-person-toggle.active {
+    border-color: var(--accent);
+    background: rgba(91,141,239,0.15);
+  }
+  .tx-person-toggle input { display: none; }
+  .add-tx-btn {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px dashed var(--border);
+    color: var(--text);
+  }
+  .add-tx-btn:hover {
+    border-color: var(--accent);
+  }
+  .result-box {
+    width: 100%;
+    min-height: 140px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 14px;
+    resize: vertical;
+  }
+  .result-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    align-items: center;
+  }
+  .copy-feedback {
+    color: var(--accent-2);
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .copy-feedback.show { opacity: 1; }
+  .calc-btn {
+    background: var(--accent-2);
+    width: 100%;
+    padding: 12px;
+    font-size: 15px;
+  }
+  .error {
+    color: var(--danger);
+    font-size: 13px;
+    margin-top: 8px;
+  }
+  .balances {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>PayMeBack</h1>
+  <div class="subtitle">Add people, assign who's covered by each transaction, and get a simple list of who owes who.</div>
+
+  <div class="panel" id="people-panel">
+    <h2>People</h2>
+    <div class="people-list" id="people-list"></div>
+    <div class="row add-person-row" style="margin-top: 10px;">
+      <input type="text" id="new-person-input" placeholder="Add a person's name" />
+      <button id="add-person-btn">Add</button>
+    </div>
+  </div>
+
+  <div class="panel" id="tx-panel">
+    <h2>Transactions</h2>
+    <div id="tx-list"></div>
+    <button class="add-tx-btn" id="add-tx-btn">+ Add Transaction</button>
+  </div>
+
+  <div class="panel">
+    <button class="calc-btn" id="calc-btn">Calculate Split</button>
+    <div class="error" id="error-msg"></div>
+    <div class="balances" id="balances"></div>
+  </div>
+
+  <div class="panel" id="result-panel" style="display:none;">
+    <h2>Result</h2>
+    <textarea class="result-box" id="result-box" readonly></textarea>
+    <div class="result-actions">
+      <button class="secondary" id="copy-btn">Copy to Clipboard</button>
+      <span class="copy-feedback" id="copy-feedback">Copied!</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---- State ----
+  let people = []; // array of names (strings, unique)
+  let transactions = []; // { id, label, amount, payer, participants: Set of names }
+  let nextTxId = 1;
+
+  const peopleListEl = document.getElementById('people-list');
+  const newPersonInput = document.getElementById('new-person-input');
+  const addPersonBtn = document.getElementById('add-person-btn');
+  const txListEl = document.getElementById('tx-list');
+  const addTxBtn = document.getElementById('add-tx-btn');
+  const calcBtn = document.getElementById('calc-btn');
+  const errorMsg = document.getElementById('error-msg');
+  const balancesEl = document.getElementById('balances');
+  const resultPanel = document.getElementById('result-panel');
+  const resultBox = document.getElementById('result-box');
+  const copyBtn = document.getElementById('copy-btn');
+  const copyFeedback = document.getElementById('copy-feedback');
+
+  function addPerson(name) {
+    name = name.trim();
+    if (!name) return;
+    if (people.includes(name)) {
+      errorMsg.textContent = `"${name}" is already added.`;
+      return;
+    }
+    people.push(name);
+    errorMsg.textContent = '';
+    renderPeople();
+    renderTransactions();
+  }
+
+  function removePerson(name) {
+    people = people.filter(p => p !== name);
+    transactions.forEach(tx => {
+      tx.participants.delete(name);
+      if (tx.payer === name) tx.payer = '';
+    });
+    renderPeople();
+    renderTransactions();
+  }
+
+  function renderPeople() {
+    peopleListEl.innerHTML = '';
+    if (people.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'empty-hint';
+      hint.textContent = 'No people added yet.';
+      peopleListEl.appendChild(hint);
+      return;
+    }
+    people.forEach(name => {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      const span = document.createElement('span');
+      span.textContent = name;
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'danger';
+      removeBtn.textContent = '×';
+      removeBtn.title = `Remove ${name}`;
+      removeBtn.addEventListener('click', () => removePerson(name));
+      chip.appendChild(span);
+      chip.appendChild(removeBtn);
+      peopleListEl.appendChild(chip);
+    });
+  }
+
+  function addTransaction() {
+    transactions.push({
+      id: nextTxId++,
+      label: '',
+      amount: '',
+      payer: '',
+      participants: new Set(people) // default: split among everyone currently added
+    });
+    renderTransactions();
+  }
+
+  function removeTransaction(id) {
+    transactions = transactions.filter(t => t.id !== id);
+    renderTransactions();
+  }
+
+  function renderTransactions() {
+    txListEl.innerHTML = '';
+    if (transactions.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'empty-hint';
+      hint.textContent = 'No transactions yet. Add one below.';
+      txListEl.appendChild(hint);
+      return;
+    }
+    transactions.forEach(tx => {
+      const txEl = document.createElement('div');
+      txEl.className = 'tx';
+
+      const header = document.createElement('div');
+      header.className = 'tx-header';
+
+      const labelInput = document.createElement('input');
+      labelInput.type = 'text';
+      labelInput.placeholder = 'Description (e.g. Dinner)';
+      labelInput.value = tx.label;
+      labelInput.addEventListener('input', e => { tx.label = e.target.value; });
+
+      const amountInput = document.createElement('input');
+      amountInput.type = 'number';
+      amountInput.placeholder = 'Amount';
+      amountInput.step = '0.01';
+      amountInput.min = '0';
+      amountInput.value = tx.amount;
+      amountInput.addEventListener('input', e => { tx.amount = e.target.value; });
+
+      const removeTxBtn = document.createElement('button');
+      removeTxBtn.className = 'danger';
+      removeTxBtn.textContent = 'Remove';
+      removeTxBtn.addEventListener('click', () => removeTransaction(tx.id));
+
+      header.appendChild(labelInput);
+      header.appendChild(amountInput);
+      header.appendChild(removeTxBtn);
+
+      const payerRow = document.createElement('div');
+      payerRow.style.marginBottom = '10px';
+      payerRow.style.fontSize = '13px';
+      payerRow.style.color = 'var(--muted)';
+      payerRow.innerHTML = 'Paid by: ';
+      const payerSelect = document.createElement('select');
+      payerSelect.style.background = 'var(--panel)';
+      payerSelect.style.color = 'var(--text)';
+      payerSelect.style.border = '1px solid var(--border)';
+      payerSelect.style.borderRadius = '6px';
+      payerSelect.style.padding = '4px 8px';
+      const blankOpt = document.createElement('option');
+      blankOpt.value = '';
+      blankOpt.textContent = '-- select --';
+      payerSelect.appendChild(blankOpt);
+      people.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        if (tx.payer === name) opt.selected = true;
+        payerSelect.appendChild(opt);
+      });
+      payerSelect.addEventListener('change', e => { tx.payer = e.target.value; });
+      payerRow.appendChild(payerSelect);
+
+      const peopleRow = document.createElement('div');
+      peopleRow.className = 'tx-people';
+
+      if (people.length === 0) {
+        const hint = document.createElement('div');
+        hint.className = 'empty-hint';
+        hint.textContent = 'Add people first to assign this transaction.';
+        peopleRow.appendChild(hint);
+      } else {
+        people.forEach(name => {
+          const toggle = document.createElement('label');
+          toggle.className = 'tx-person-toggle' + (tx.participants.has(name) ? ' active' : '');
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = tx.participants.has(name);
+          cb.addEventListener('change', () => {
+            if (cb.checked) tx.participants.add(name);
+            else tx.participants.delete(name);
+            toggle.classList.toggle('active', cb.checked);
+          });
+          const span = document.createElement('span');
+          span.textContent = name;
+          toggle.appendChild(cb);
+          toggle.appendChild(span);
+          peopleRow.appendChild(toggle);
+        });
+      }
+
+      txEl.appendChild(header);
+      txEl.appendChild(payerRow);
+      txEl.appendChild(peopleRow);
+      txListEl.appendChild(txEl);
+    });
+  }
+
+  // ---- Calculation ----
+  function calculate() {
+    errorMsg.textContent = '';
+    resultPanel.style.display = 'none';
+    balancesEl.innerHTML = '';
+
+    if (people.length < 2) {
+      errorMsg.textContent = 'Add at least two people.';
+      return;
+    }
+    if (transactions.length === 0) {
+      errorMsg.textContent = 'Add at least one transaction.';
+      return;
+    }
+
+    const balances = {}; // name -> net balance (positive = should receive money, negative = owes money)
+    people.forEach(p => balances[p] = 0);
+
+    for (const tx of transactions) {
+      const amount = parseFloat(tx.amount);
+      if (!tx.payer) {
+        errorMsg.textContent = `Transaction "${tx.label || '(untitled)'}" needs a payer.`;
+        return;
+      }
+      if (isNaN(amount) || amount <= 0) {
+        errorMsg.textContent = `Transaction "${tx.label || '(untitled)'}" needs a valid amount.`;
+        return;
+      }
+      const participants = Array.from(tx.participants);
+      if (participants.length === 0) {
+        errorMsg.textContent = `Transaction "${tx.label || '(untitled)'}" needs at least one participant.`;
+        return;
+      }
+      const share = amount / participants.length;
+      balances[tx.payer] += amount;
+      participants.forEach(p => { balances[p] -= share; });
+    }
+
+    // Settle balances: people with negative balance owe people with positive balance
+    const debtors = [];
+    const creditors = [];
+    const EPS = 0.005;
+    for (const name of people) {
+      const bal = Math.round(balances[name] * 100) / 100;
+      if (bal < -EPS) debtors.push({ name, amount: -bal });
+      else if (bal > EPS) creditors.push({ name, amount: bal });
+    }
+
+    debtors.sort((a, b) => b.amount - a.amount);
+    creditors.sort((a, b) => b.amount - a.amount);
+
+    const settlements = [];
+    let di = 0, ci = 0;
+    while (di < debtors.length && ci < creditors.length) {
+      const debtor = debtors[di];
+      const creditor = creditors[ci];
+      const amt = Math.min(debtor.amount, creditor.amount);
+      if (amt > EPS) {
+        settlements.push({ from: debtor.name, to: creditor.name, amount: amt });
+      }
+      debtor.amount -= amt;
+      creditor.amount -= amt;
+      if (debtor.amount <= EPS) di++;
+      if (creditor.amount <= EPS) ci++;
+    }
+
+    // Render balances summary
+    people.forEach(name => {
+      const bal = Math.round(balances[name] * 100) / 100;
+      const div = document.createElement('div');
+      if (bal > EPS) div.textContent = `${name} is owed $${bal.toFixed(2)}`;
+      else if (bal < -EPS) div.textContent = `${name} owes $${(-bal).toFixed(2)}`;
+      else div.textContent = `${name} is settled up`;
+      balancesEl.appendChild(div);
+    });
+
+    if (settlements.length === 0) {
+      resultBox.value = 'Everyone is already settled up!';
+    } else {
+      resultBox.value = settlements
+        .map(s => `${s.from} -> ${s.to}: $${s.amount.toFixed(2)}`)
+        .join('\n');
+    }
+    resultPanel.style.display = 'block';
+  }
+
+  // ---- Events ----
+  addPersonBtn.addEventListener('click', () => {
+    addPerson(newPersonInput.value);
+    newPersonInput.value = '';
+    newPersonInput.focus();
+  });
+  newPersonInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      addPerson(newPersonInput.value);
+      newPersonInput.value = '';
+    }
+  });
+  addTxBtn.addEventListener('click', addTransaction);
+  calcBtn.addEventListener('click', calculate);
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(resultBox.value);
+    } catch (e) {
+      resultBox.select();
+      document.execCommand('copy');
+    }
+    copyFeedback.classList.add('show');
+    setTimeout(() => copyFeedback.classList.remove('show'), 1500);
+  });
+
+  // ---- Init ----
+  renderPeople();
+  renderTransactions();
+</script>
+</body>
+</html>
